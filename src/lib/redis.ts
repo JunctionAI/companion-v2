@@ -2,10 +2,17 @@ import Redis from 'ioredis'
 import { env } from '../config/env.js'
 import { logger } from './logger.js'
 
-export const redis = new Redis(env.REDIS_URL, {
-  maxRetriesPerRequest: null, // Required by BullMQ
-  lazyConnect: true,
-})
+let redis: InstanceType<typeof Redis.default> | null = null
 
-redis.on('connect', () => logger.info('Redis connected'))
-redis.on('error', (err) => logger.error({ err }, 'Redis error'))
+if (env.REDIS_URL) {
+  redis = new Redis.default(env.REDIS_URL, {
+    maxRetriesPerRequest: null,
+    lazyConnect: true,
+  })
+  redis.on('connect', () => logger.info('Redis connected'))
+  redis.on('error', (err: Error) => logger.error({ err }, 'Redis error'))
+} else {
+  logger.info('Redis not configured — BullMQ will be unavailable')
+}
+
+export { redis }

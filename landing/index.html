@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>companion — open-source AI health agent</title>
+  <meta name="description" content="An open-source AI agent that builds your health plan, holds you accountable, and gets smarter with every data point. Self-hosted. Runs in Telegram. Costs $2/month.">
+  <meta property="og:title" content="companion — open-source AI health agent">
+  <meta property="og:description" content="Tell it where you are. Tell it where you want to be. It builds the plan, checks in daily, and refines based on your data.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="companion — open-source AI health agent">
+  <meta name="twitter:description" content="Self-hosted AI that builds your health protocol and holds you accountable. Blood tests, daily metrics, permanent memory. $2/month.">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #0a0a0a;
+      --bg-card: #111111;
+      --bg-code: #1a1a1a;
+      --text: #e5e5e5;
+      --text-dim: #888888;
+      --text-bright: #ffffff;
+      --accent: #22c55e;
+      --accent-dim: #16a34a;
+      --border: #222222;
+      --mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ─── Nav ─── */
+    nav {
+      position: fixed;
+      top: 0;
+      width: 100%;
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(10, 10, 10, 0.8);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      z-index: 100;
+    }
+
+    .nav-logo {
+      font-family: var(--mono);
+      font-size: 1.1rem;
+      color: var(--text-bright);
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+      align-items: center;
+    }
+
+    .nav-links a {
+      color: var(--text-dim);
+      font-size: 0.9rem;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover { color: var(--text-bright); text-decoration: none; }
+
+    .nav-btn {
+      background: var(--text-bright);
+      color: var(--bg);
+      padding: 0.5rem 1.2rem;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      transition: opacity 0.2s;
+    }
+
+    .nav-btn:hover { opacity: 0.9; text-decoration: none; }
+
+    /* ─── Hero ─── */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 8rem 2rem 4rem;
+      max-width: 850px;
+      margin: 0 auto;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      padding: 0.4rem 1rem;
+      border-radius: 100px;
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      margin-bottom: 2rem;
+    }
+
+    .hero-badge .dot {
+      width: 6px;
+      height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    h1 {
+      font-size: clamp(2.5rem, 6vw, 4.2rem);
+      font-weight: 800;
+      color: var(--text-bright);
+      line-height: 1.1;
+      letter-spacing: -2px;
+      margin-bottom: 1.5rem;
+    }
+
+    .hero-sub {
+      font-size: 1.25rem;
+      color: var(--text-dim);
+      max-width: 640px;
+      line-height: 1.7;
+      margin-bottom: 3rem;
+    }
+
+    .hero-sub strong { color: var(--text); font-weight: 500; }
+
+    /* ─── Install Block ─── */
+    .install-block {
+      width: 100%;
+      max-width: 560px;
+      margin: 0 auto 2rem;
+    }
+
+    .code-block {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .code-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .code-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .code-dot.r { background: #ff5f57; }
+    .code-dot.y { background: #febc2e; }
+    .code-dot.g { background: #28c840; }
+
+    .code-body {
+      padding: 1.25rem;
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      line-height: 1.8;
+      color: var(--text);
+      text-align: left;
+      overflow-x: auto;
+    }
+
+    .code-body .prompt { color: var(--accent); }
+    .code-body .comment { color: #555; }
+
+    .hero-stats {
+      display: flex;
+      gap: 2.5rem;
+      margin-top: 1rem;
+      color: var(--text-dim);
+      font-size: 0.85rem;
+    }
+
+    .hero-stats span { color: var(--text-bright); font-weight: 600; }
+
+    /* ─── Section Layout ─── */
+    section {
+      padding: 6rem 2rem;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .section-label {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 1rem;
+    }
+
+    h2 {
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      font-weight: 700;
+      color: var(--text-bright);
+      letter-spacing: -1px;
+      margin-bottom: 1rem;
+    }
+
+    .section-desc {
+      color: var(--text-dim);
+      font-size: 1.1rem;
+      max-width: 600px;
+      margin-bottom: 3rem;
+    }
+
+    /* ─── Loop Section ─── */
+    .loop-section {
+      padding: 6rem 2rem;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .loop-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-top: 2rem;
+    }
+
+    .loop-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem;
+      position: relative;
+    }
+
+    .loop-num {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 0.75rem;
+    }
+
+    .loop-card h3 {
+      color: var(--text-bright);
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .loop-card p {
+      color: var(--text-dim);
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+
+    .loop-arrow {
+      display: none;
+    }
+
+    /* ─── Demo Section ─── */
+    .demo-section {
+      padding: 6rem 2rem;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    .chat-window {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      margin-top: 2rem;
+    }
+
+    .chat-header {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .chat-avatar {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--accent), #059669);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+    }
+
+    .chat-name {
+      font-weight: 600;
+      color: var(--text-bright);
+      font-size: 0.95rem;
+    }
+
+    .chat-status {
+      font-size: 0.75rem;
+      color: var(--accent);
+    }
+
+    .chat-body { padding: 1.5rem; }
+
+    .chat-divider {
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.75rem;
+      font-family: var(--mono);
+      padding: 0.75rem 0;
+      border-top: 1px solid var(--border);
+      margin: 0.5rem 0;
+    }
+
+    .msg {
+      margin-bottom: 1rem;
+      max-width: 85%;
+    }
+
+    .msg.user {
+      margin-left: auto;
+      background: #1a3a2a;
+      border: 1px solid #244d35;
+      border-radius: 12px 12px 4px 12px;
+      padding: 0.75rem 1rem;
+    }
+
+    .msg.bot {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 12px 12px 12px 4px;
+      padding: 0.75rem 1rem;
+    }
+
+    .msg p {
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+
+    .msg .label {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      margin-bottom: 0.25rem;
+      font-family: var(--mono);
+    }
+
+    .msg strong { color: var(--text-bright); }
+
+    /* ─── Features Grid ─── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem;
+      transition: border-color 0.3s;
+    }
+
+    .feature-card:hover { border-color: #333; }
+
+    .feature-icon {
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+      display: block;
+    }
+
+    .feature-card h3 {
+      font-size: 1.1rem;
+      color: var(--text-bright);
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+    }
+
+    .feature-card p {
+      color: var(--text-dim);
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+
+    /* ─── How It Works ─── */
+    .steps {
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+
+    .step {
+      display: flex;
+      gap: 1.5rem;
+      align-items: flex-start;
+    }
+
+    .step-num {
+      flex-shrink: 0;
+      width: 40px;
+      height: 40px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--mono);
+      font-weight: 700;
+      color: var(--accent);
+      font-size: 0.9rem;
+    }
+
+    .step-content h3 {
+      color: var(--text-bright);
+      font-size: 1.05rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .step-content p {
+      color: var(--text-dim);
+      font-size: 0.9rem;
+    }
+
+    .step-content code {
+      background: var(--bg-code);
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--accent);
+    }
+
+    /* ─── Comparison ─── */
+    .compare-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-top: 2rem;
+    }
+
+    .compare-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem;
+    }
+
+    .compare-card.dim { opacity: 0.6; }
+
+    .compare-card h3 {
+      color: var(--text-bright);
+      font-size: 1.05rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .compare-card.dim h3 { color: var(--text-dim); }
+
+    .compare-card ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    .compare-card li {
+      padding: 0.3rem 0;
+      font-size: 0.9rem;
+      color: var(--text-dim);
+    }
+
+    .compare-card li::before {
+      content: '- ';
+      color: var(--text-dim);
+    }
+
+    .compare-card:not(.dim) li::before {
+      content: '+ ';
+      color: var(--accent);
+    }
+
+    /* ─── Cost Section ─── */
+    .cost-block {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 3rem;
+      text-align: center;
+      margin-top: 2rem;
+    }
+
+    .cost-price {
+      font-size: 3.5rem;
+      font-weight: 800;
+      color: var(--text-bright);
+      letter-spacing: -2px;
+    }
+
+    .cost-per {
+      color: var(--text-dim);
+      font-size: 1.1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .cost-breakdown {
+      text-align: left;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+
+    .cost-breakdown li {
+      list-style: none;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-dim);
+      font-size: 0.9rem;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .cost-breakdown li span { color: var(--text-bright); font-weight: 600; }
+
+    /* ─── CTA ─── */
+    .cta-section {
+      text-align: center;
+      padding: 8rem 2rem;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    .cta-section h2 { margin-bottom: 1.5rem; }
+
+    .cta-buttons {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 2rem;
+    }
+
+    .btn-primary {
+      background: var(--text-bright);
+      color: var(--bg);
+      padding: 0.85rem 2rem;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 1rem;
+      transition: opacity 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn-primary:hover { opacity: 0.9; text-decoration: none; }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--text);
+      padding: 0.85rem 2rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 1rem;
+      border: 1px solid var(--border);
+      transition: border-color 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn-secondary:hover { border-color: #444; text-decoration: none; }
+
+    /* ─── Footer ─── */
+    footer {
+      padding: 3rem 2rem;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.85rem;
+    }
+
+    footer a { color: var(--text-dim); }
+    footer a:hover { color: var(--text-bright); }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 640px) {
+      nav { padding: 1rem; }
+      .nav-links { gap: 1rem; }
+      .hero { padding: 7rem 1.5rem 3rem; }
+      section { padding: 4rem 1.5rem; }
+      .hero-stats { gap: 1.5rem; flex-wrap: wrap; justify-content: center; }
+      .features-grid { grid-template-columns: 1fr; }
+      .loop-grid { grid-template-columns: 1fr; }
+      .compare-grid { grid-template-columns: 1fr; }
+      .cta-buttons { flex-direction: column; align-items: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav>
+    <div class="nav-logo">companion</div>
+    <div class="nav-links">
+      <a href="#how-it-works">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#demo">Demo</a>
+      <a href="https://github.com/JunctionAI/companion-v2" class="nav-btn">GitHub</a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-badge">
+      <div class="dot"></div>
+      Open source &middot; Self-hosted &middot; MIT License
+    </div>
+
+    <h1>An AI agent that gets you healthy.</h1>
+
+    <p class="hero-sub">
+      Tell it where you are. Tell it where you want to be.<br>
+      It builds the plan, checks in daily, and <strong>gets smarter with every data point you feed it</strong> &mdash;
+      blood tests, daily metrics, how you slept, what you ate.<br><br>
+      Not a chatbot. Not a dashboard. An agent that texts you in Telegram and holds you accountable.
+    </p>
+
+    <div class="install-block">
+      <div class="code-block">
+        <div class="code-header">
+          <div class="code-dot r"></div>
+          <div class="code-dot y"></div>
+          <div class="code-dot g"></div>
+        </div>
+        <div class="code-body">
+          <span class="prompt">$</span> git clone https://github.com/JunctionAI/companion-v2.git<br>
+          <span class="prompt">$</span> cd companion-v2 && npm install<br>
+          <span class="prompt">$</span> npm run setup<br>
+          <span class="prompt">$</span> npm run dev<br>
+          <span class="comment"># your health agent is live. message it.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-stats">
+      <div><span>5 min</span> to running</div>
+      <div><span>~$2/mo</span> API cost</div>
+      <div><span>0</span> cloud deps</div>
+      <div><span>100%</span> your data</div>
+    </div>
+  </div>
+
+  <!-- The Loop -->
+  <div class="loop-section" id="how-it-works">
+    <div class="section-label">How it works</div>
+    <h2>The loop that makes you healthier</h2>
+    <p class="section-desc">Most health apps are passive &mdash; you go to them. Companion comes to you. Every day. With a plan that gets sharper over time.</p>
+
+    <div class="loop-grid">
+      <div class="loop-card">
+        <div class="loop-num">Step 1 &mdash; Brief</div>
+        <h3>Tell it everything</h3>
+        <p>Age, goals, injuries, medical history, activity level, what you've tried before. It onboards you through Telegram in 60 seconds and builds a full health profile.</p>
+      </div>
+
+      <div class="loop-card">
+        <div class="loop-num">Step 2 &mdash; Plan</div>
+        <h3>It builds your protocol</h3>
+        <p>Training schedule, nutrition targets, supplement timing, sleep protocol. Personalised to your goals and current state. Evidence-based &mdash; it explains the mechanisms, not just the instructions.</p>
+      </div>
+
+      <div class="loop-card">
+        <div class="loop-num">Step 3 &mdash; Accountable</div>
+        <h3>Daily check-ins via Telegram</h3>
+        <p>Morning: here's today's plan. Evening: how did it go? It tracks your adherence, spots patterns, names your wins, and flags when something's off. It doesn't let you drift.</p>
+      </div>
+
+      <div class="loop-card">
+        <div class="loop-num">Step 4 &mdash; Refine</div>
+        <h3>Feed it data, it gets smarter</h3>
+        <p>Log sleep, mood, weight, HRV. Send a blood test photo. Every data point refines the plan. Vitamin D low? Protocol adjusts. Sleep tanking? Training dials back. It's a feedback loop, not a static plan.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Demo -->
+  <div class="demo-section" id="demo">
+    <div class="section-label">Real conversation</div>
+    <h2>What it actually looks like</h2>
+    <p class="section-desc">This is a real exchange. Not a mockup. The agent is proactive &mdash; it initiates, follows up, and adapts.</p>
+
+    <div class="chat-window">
+      <div class="chat-header">
+        <div class="chat-avatar">C</div>
+        <div>
+          <div class="chat-name">Companion</div>
+          <div class="chat-status">online</div>
+        </div>
+      </div>
+      <div class="chat-body">
+
+        <div class="msg bot">
+          <div class="label">Companion &middot; 8:00 AM</div>
+          <p>
+            <strong>Morning. Day 18 of your protocol.</strong><br><br>
+            Sleep check: how'd you go last night?<br><br>
+            Today's plan:<br>
+            - Zone 2 cardio: 35 min (brain medicine &mdash; BDNF peaks after 30 min sustained)<br>
+            - Push session tonight: bench, OHP, dips<br>
+            - Protein target: 155g<br>
+            - Supplements: omega-3 with breakfast, D3 with lunch, mag glycinate before bed<br><br>
+            Your 7-day sleep average is up to 7.2 hours. That's a 40-minute improvement from week 1. Myelin repair happens during deep sleep &mdash; this is real progress.
+          </p>
+        </div>
+
+        <div class="msg user">
+          <div class="label">You</div>
+          <p>slept 7.5, felt solid. got my blood test results back</p>
+        </div>
+
+        <div class="msg user">
+          <div class="label">You</div>
+          <p>[sends blood test photo]</p>
+        </div>
+
+        <div class="msg bot">
+          <div class="label">Companion</div>
+          <p>
+            <strong>Found 14 markers.</strong> Let me break these down.<br><br>
+            The good: <strong>HbA1c 5.4%</strong> (no pre-diabetic flags), <strong>testosterone 18.2 nmol/L</strong> (upper third for 25 &mdash; your training is working), liver function clean.<br><br>
+            Needs attention: <strong>Vitamin D at 48 nmol/L</strong> &mdash; below optimal (75-125). At your latitude, expected. This is a neurosteroid that directly affects mood, immune function, and recovery. We'll bump your D3 to 4000 IU/day.<br><br>
+            <strong>Omega-3 index at 4.2%</strong> &mdash; should be 8%+. EPA crosses the blood-brain barrier and reduces neuroinflammation. Adding 2g EPA/DHA daily.<br><br>
+            I'm updating your protocol now. Retest in 12 weeks to verify.
+          </p>
+        </div>
+
+        <div class="chat-divider">Next morning</div>
+
+        <div class="msg bot">
+          <div class="label">Companion &middot; 8:00 AM</div>
+          <p>
+            <strong>Morning. Day 19 &mdash; updated protocol is live.</strong><br><br>
+            Two changes based on your bloodwork:<br>
+            - D3 increased: 4000 IU with breakfast (fat-soluble &mdash; take with eggs)<br>
+            - Omega-3 increased: 2g EPA/DHA with lunch<br><br>
+            Everything else stays. Your foundation is solid &mdash; we're just filling the gaps the blood test showed us.<br><br>
+            How did you sleep?
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Comparison -->
+  <section>
+    <div class="section-label">Why this exists</div>
+    <h2>Health apps don't work because they're passive</h2>
+    <p class="section-desc">You don't need another dashboard to check. You need something that shows up, asks the hard questions, and adapts when the data changes.</p>
+
+    <div class="compare-grid">
+      <div class="compare-card dim">
+        <h3>Every other health app</h3>
+        <ul>
+          <li>You go to it when you remember</li>
+          <li>Generic advice for everyone</li>
+          <li>Static plan that never changes</li>
+          <li>Data sits in a dashboard you stop checking</li>
+          <li>$20-50/month subscription</li>
+          <li>Your data on their servers</li>
+        </ul>
+      </div>
+      <div class="compare-card">
+        <h3>companion</h3>
+        <ul>
+          <li>It comes to you every morning and evening</li>
+          <li>Knows your history, injuries, goals, bloodwork</li>
+          <li>Plan refines with every data point</li>
+          <li>Data drives real changes to your protocol</li>
+          <li>~$2/month (your API key)</li>
+          <li>Everything stays on your machine</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="features">
+    <div class="section-label">Data integration</div>
+    <h2>Every data point makes it smarter</h2>
+    <p class="section-desc">The more you feed it, the better it gets. Start with conversations. Add metrics. Send bloodwork. The plan adapts.</p>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <span class="feature-icon">🩸</span>
+        <h3>Blood Test Ingestion</h3>
+        <p>Send a photo of your blood test. Claude Vision extracts every marker, stores it, and interprets results in plain language. Protocol auto-adjusts based on what's flagged.</p>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">📊</span>
+        <h3>Daily Metrics</h3>
+        <p><code>/log sleep 7.5</code> &mdash; log sleep, HRV, weight, mood, energy, steps. All injected into your companion's context. It references your trends, not generic advice.</p>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">🧠</span>
+        <h3>Permanent Memory</h3>
+        <p>Every conversation gets processed for facts. Cross-session, cross-day. Your companion remembers your injuries, preferences, what worked, what didn't. It never starts from scratch.</p>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">📋</span>
+        <h3>Adaptive Plans</h3>
+        <p>Training, nutrition, supplements, sleep &mdash; all in one protocol. When your data changes (new blood test, dropped adherence, injury flare), the plan changes with it.</p>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">🔬</span>
+        <h3>Evidence-Based Reasoning</h3>
+        <p>Built-in health reasoning framework. Explains the biology &mdash; why something works, what the mechanism is. Never pseudoscience. 4-tier safety escalation for emergencies.</p>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">🔧</span>
+        <h3>Fully Extensible</h3>
+        <p>Agent files are just markdown. Edit AGENT.md to change personality. Add skills, training files, playbooks. Fork the template, build your own domain. It's your agent.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Setup -->
+  <section>
+    <div class="section-label">Get started</div>
+    <h2>Running in 5 minutes</h2>
+    <p class="section-desc">You need Node.js 20+, an Anthropic API key, and a Telegram account. That's it.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <h3>Clone and install</h3>
+          <p><code>git clone</code> and <code>npm install</code>. Standard Node.js project.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <h3>Run the setup wizard</h3>
+          <p><code>npm run setup</code> asks for your API key, Telegram bot token, and health info. Generates everything.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <h3>Start your agent</h3>
+          <p><code>npm run dev</code> &mdash; your agent is live. Message it in Telegram. Morning and evening check-ins begin automatically.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <h3>Feed it data</h3>
+          <p>Log metrics with <code>/log sleep 7.5</code>. Send blood test photos. The more data, the sharper the plan.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Cost -->
+  <section>
+    <div class="section-label">Cost</div>
+    <h2>No subscription. Ever.</h2>
+    <p class="section-desc">You pay Anthropic directly for what you use. We make $0. This is infrastructure, not a product.</p>
+
+    <div class="cost-block">
+      <div class="cost-price">~$2</div>
+      <div class="cost-per">per month for daily use</div>
+      <ul class="cost-breakdown">
+        <li>Software <span>Free forever (MIT)</span></li>
+        <li>Daily conversations (Sonnet) <span>~$0.04/message</span></li>
+        <li>Memory extraction (Haiku) <span>~$0.001/each</span></li>
+        <li>Blood test parsing (Vision) <span>~$0.05/photo</span></li>
+        <li>Hosting <span>Your machine or $5/mo VPS</span></li>
+        <li>Your health data <span>Never leaves your device</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <div class="cta-section">
+    <h2>Your health agent. Your data. Your machine.</h2>
+    <p class="section-desc" style="margin: 0 auto">
+      Clone it. Brief it. Let it hold you accountable.
+    </p>
+    <div class="cta-buttons">
+      <a href="https://github.com/JunctionAI/companion-v2" class="btn-primary">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        View on GitHub
+      </a>
+      <a href="https://github.com/JunctionAI/companion-v2#quick-start-5-minutes" class="btn-secondary">
+        Quick Start Guide
+      </a>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <p>
+      Built by <a href="https://x.com/tomhalltaylor">Tom Hall-Taylor</a> &middot;
+      <a href="https://github.com/JunctionAI/companion-v2">GitHub</a> &middot;
+      MIT License
+    </p>
+  </footer>
+
+</body>
+</html>

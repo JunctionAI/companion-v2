@@ -3,3 +3,14 @@ dist/
 .env
 *.log
 .DS_Store
+
+# Personal agent data (created by setup wizard / onboarding)
+# Only _template/ and shared/ are committed
+agents/*
+!agents/_template/
+!agents/shared/
+
+# SQLite databases (contain personal health data)
+data/*.db
+data/*.db-wal
+data/*.db-shm

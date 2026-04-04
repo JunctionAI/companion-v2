@@ -7,6 +7,11 @@ export interface AuthRequest extends Request {
 }
 
 export async function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
+  if (!supabase) {
+    res.status(503).json({ error: 'Auth requires Supabase configuration' })
+    return
+  }
+
   const authHeader = req.headers.authorization
   if (!authHeader?.startsWith('Bearer ')) {
     res.status(401).json({ error: 'Missing authorization header' })

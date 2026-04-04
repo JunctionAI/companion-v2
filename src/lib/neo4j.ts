@@ -6,6 +6,9 @@ let driver: Driver | null = null
 
 export function getDriver(): Driver {
   if (!driver) {
+    if (!env.NEO4J_URI || !env.NEO4J_PASSWORD) {
+      throw new Error('Neo4j not configured')
+    }
     driver = neo4j.driver(
       env.NEO4J_URI,
       neo4j.auth.basic(env.NEO4J_USERNAME, env.NEO4J_PASSWORD),
@@ -24,6 +27,10 @@ export async function closeDriver(): Promise<void> {
 }
 
 export async function verifyConnection(): Promise<boolean> {
+  if (!env.NEO4J_URI || !env.NEO4J_PASSWORD) {
+    logger.info('Neo4j not configured — skipping')
+    return false
+  }
   try {
     const d = getDriver()
     await d.verifyConnectivity()

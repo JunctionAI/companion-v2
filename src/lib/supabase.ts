@@ -1,8 +1,16 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { env } from '../config/env.js'
+import { logger } from './logger.js'
 
-// Service client — bypasses RLS, used server-side only
-export const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
+let supabase: SupabaseClient | null = null
+let supabaseAnon: SupabaseClient | null = null
 
-// Anon client — respects RLS, used for user-context queries
-export const supabaseAnon = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY)
+if (env.SUPABASE_URL && env.SUPABASE_SERVICE_KEY && env.SUPABASE_ANON_KEY) {
+  supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
+  supabaseAnon = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY)
+  logger.info('Supabase clients initialised')
+} else {
+  logger.info('Supabase not configured — web API will be unavailable')
+}
+
+export { supabase, supabaseAnon }

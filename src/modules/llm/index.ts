@@ -82,7 +82,7 @@ export async function* streamChat(
 
   // Log cache performance
   const finalMessage = await stream.finalMessage()
-  const usage = finalMessage.usage as Record<string, number>
+  const usage = finalMessage.usage as unknown as Record<string, number>
   logger.info({
     inputTokens: usage.input_tokens,
     outputTokens: usage.output_tokens,

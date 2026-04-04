@@ -4,6 +4,8 @@ import { env } from './config/env.js'
 import { logger } from './lib/logger.js'
 import { verifyConnection as verifyNeo4j, closeDriver } from './lib/neo4j.js'
 import { chatRouter } from './api/routes/chat.js'
+import { startTelegramTransport } from './transport/telegram.js'
+import { startScheduler, stopScheduler } from './workers/scheduler.js'
 
 const app = express()
 
@@ -13,14 +15,11 @@ app.use(express.json())
 
 // ─── Health check ───
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', version: '0.1.0' })
+  res.json({ status: 'ok', version: '0.2.0' })
 })
 
 // ─── Routes ───
 app.use('/api/chat', chatRouter)
-
-// TODO Phase 1: profile, goals, metrics, labs routes
-// TODO Phase 2: BullMQ worker routes, scheduler
 
 // ─── Start ───
 async function start() {
@@ -30,14 +29,24 @@ async function start() {
     logger.warn('Neo4j unavailable — memory retrieval will return empty results')
   }
 
+  // Start Express API server
   app.listen(env.PORT, () => {
-    logger.info({ port: env.PORT, env: env.NODE_ENV }, 'companion-v2 server running')
+    logger.info({ port: env.PORT, env: env.NODE_ENV }, 'companion-v2 API server running')
   })
+
+  // Start Telegram polling
+  startTelegramTransport()
+
+  // Start cron scheduler for check-ins
+  startScheduler()
+
+  logger.info('companion-v2 fully started — API + Telegram + Scheduler')
 }
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received — shutting down')
+  stopScheduler()
   await closeDriver()
   process.exit(0)
 })
