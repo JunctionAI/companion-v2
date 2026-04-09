@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice Call</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0a0a0a;
+      color: #fff;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      text-align: center;
+      max-width: 400px;
+      padding: 2rem;
+    }
+    .avatar {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      margin: 0 auto 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 3rem;
+      transition: box-shadow 0.3s;
+    }
+    .avatar.active {
+      box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.3), 0 0 40px rgba(102, 126, 234, 0.4);
+      animation: pulse 2s infinite;
+    }
+    .avatar.listening {
+      box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.3), 0 0 40px rgba(76, 175, 80, 0.4);
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.3), 0 0 40px rgba(102, 126, 234, 0.4); }
+      50% { box-shadow: 0 0 0 8px rgba(102, 126, 234, 0.2), 0 0 60px rgba(102, 126, 234, 0.3); }
+    }
+    h2 { margin-bottom: 0.5rem; font-weight: 600; }
+    .status {
+      color: #888;
+      font-size: 0.9rem;
+      margin-bottom: 2rem;
+      min-height: 1.5em;
+    }
+    .status.connected { color: #4caf50; }
+    .status.speaking { color: #667eea; }
+    .btn {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      font-size: 1.5rem;
+      transition: transform 0.2s, background 0.2s;
+    }
+    .btn:hover { transform: scale(1.05); }
+    .btn:active { transform: scale(0.95); }
+    .btn-call {
+      background: #4caf50;
+      color: white;
+    }
+    .btn-end {
+      background: #f44336;
+      color: white;
+    }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .transcript {
+      margin-top: 2rem;
+      text-align: left;
+      max-height: 200px;
+      overflow-y: auto;
+      font-size: 0.85rem;
+      color: #aaa;
+      padding: 1rem;
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      display: none;
+    }
+    .transcript.visible { display: block; }
+    .transcript .user { color: #4caf50; }
+    .transcript .assistant { color: #667eea; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="avatar" id="avatar">🎙️</div>
+    <h2 id="agentDisplayName">Your Companion</h2>
+    <div class="status" id="status">Tap to start a voice call</div>
+
+    <button class="btn btn-call" id="callBtn" onclick="startCall()">📞</button>
+    <button class="btn btn-end" id="endBtn" onclick="endCall()" style="display:none">✕</button>
+
+    <div class="transcript" id="transcript"></div>
+  </div>
+
+  <audio id="audioOut" autoplay></audio>
+
+  <script>
+    const params = new URLSearchParams(window.location.search)
+    const agentName = params.get('agent') || 'apex'
+    const userId = params.get('user') || ''
+    const chatId = params.get('chat') || ''
+
+    let pc = null
+    let dc = null
+    let conversationLog = []
+
+    const avatar = document.getElementById('avatar')
+    const status = document.getElementById('status')
+    const callBtn = document.getElementById('callBtn')
+    const endBtn = document.getElementById('endBtn')
+    const transcriptEl = document.getElementById('transcript')
+    const audioOut = document.getElementById('audioOut')
+
+    if (agentName) {
+      document.getElementById('agentDisplayName').textContent =
+        agentName.charAt(0).toUpperCase() + agentName.slice(1)
+    }
+
+    async function startCall() {
+      callBtn.disabled = true
+      status.textContent = 'Connecting...'
+
+      try {
+        // 1. Get ephemeral token + instructions from our server
+        const sessionResp = await fetch('/api/voice/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentName, userId })
+        })
+
+        if (!sessionResp.ok) {
+          throw new Error('Failed to create session')
+        }
+
+        const { token } = await sessionResp.json()
+        if (!token) throw new Error('No token received')
+
+        // 2. Set up WebRTC peer connection
+        pc = new RTCPeerConnection()
+
+        // Handle incoming audio
+        pc.ontrack = (e) => {
+          audioOut.srcObject = e.streams[0]
+        }
+
+        // Add microphone
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        pc.addTrack(stream.getTracks()[0])
+
+        // Data channel for events
+        dc = pc.createDataChannel('oai-events')
+
+        dc.addEventListener('open', () => {
+          status.textContent = 'Connected — start talking'
+          status.className = 'status connected'
+          avatar.classList.add('active')
+          callBtn.style.display = 'none'
+          endBtn.style.display = 'inline-block'
+          transcriptEl.classList.add('visible')
+        })
+
+        dc.addEventListener('message', (e) => {
+          const event = JSON.parse(e.data)
+          handleRealtimeEvent(event)
+        })
+
+        dc.addEventListener('close', () => {
+          endCall()
+        })
+
+        // SDP negotiation
+        const offer = await pc.createOffer()
+        await pc.setLocalDescription(offer)
+
+        const sdpResp = await fetch('https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/sdp',
+          },
+          body: offer.sdp,
+        })
+
+        if (!sdpResp.ok) {
+          throw new Error(`SDP negotiation failed: ${sdpResp.status}`)
+        }
+
+        const answerSdp = await sdpResp.text()
+        await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp })
+
+      } catch (err) {
+        console.error('Call failed:', err)
+        status.textContent = 'Failed to connect — ' + err.message
+        status.className = 'status'
+        callBtn.disabled = false
+        callBtn.style.display = 'inline-block'
+        endBtn.style.display = 'none'
+      }
+    }
+
+    function handleRealtimeEvent(event) {
+      switch (event.type) {
+        case 'input_audio_buffer.speech_started':
+          status.textContent = 'Listening...'
+          status.className = 'status connected'
+          avatar.classList.add('listening')
+          avatar.classList.remove('active')
+          break
+
+        case 'input_audio_buffer.speech_stopped':
+          status.textContent = 'Thinking...'
+          status.className = 'status speaking'
+          avatar.classList.remove('listening')
+          break
+
+        case 'response.audio_transcript.delta':
+          // Model is speaking
+          status.textContent = 'Speaking...'
+          status.className = 'status speaking'
+          avatar.classList.add('active')
+          avatar.classList.remove('listening')
+          break
+
+        case 'response.audio_transcript.done':
+          if (event.transcript) {
+            appendTranscript('assistant', event.transcript)
+            conversationLog.push({ role: 'assistant', content: event.transcript })
+          }
+          status.textContent = 'Connected — your turn'
+          status.className = 'status connected'
+          break
+
+        case 'conversation.item.input_audio_transcription.completed':
+          if (event.transcript) {
+            appendTranscript('user', event.transcript)
+            conversationLog.push({ role: 'user', content: event.transcript })
+          }
+          break
+
+        case 'error':
+          console.error('Realtime error:', event.error)
+          status.textContent = 'Error: ' + (event.error?.message || 'unknown')
+          break
+      }
+    }
+
+    function appendTranscript(role, text) {
+      const div = document.createElement('div')
+      div.className = role
+      div.textContent = (role === 'user' ? 'You: ' : 'Agent: ') + text
+      transcriptEl.appendChild(div)
+      transcriptEl.scrollTop = transcriptEl.scrollHeight
+    }
+
+    async function endCall() {
+      status.textContent = 'Call ended'
+      status.className = 'status'
+      avatar.classList.remove('active', 'listening')
+      callBtn.style.display = 'inline-block'
+      callBtn.disabled = false
+      endBtn.style.display = 'none'
+
+      // Close WebRTC
+      if (dc) { try { dc.close() } catch {} }
+      if (pc) {
+        pc.getSenders().forEach(s => { if (s.track) s.track.stop() })
+        pc.close()
+      }
+      pc = null
+      dc = null
+
+      // Save transcript to server
+      if (conversationLog.length > 0) {
+        try {
+          await fetch('/api/voice/transcript', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentName,
+              userId,
+              chatId,
+              transcript: conversationLog,
+            })
+          })
+        } catch (err) {
+          console.error('Failed to save transcript:', err)
+        }
+      }
+      conversationLog = []
+    }
+
+    // Clean up on page close
+    window.addEventListener('beforeunload', () => {
+      if (pc) endCall()
+    })
+  </script>
+</body>
+</html>

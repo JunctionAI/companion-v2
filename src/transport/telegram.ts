@@ -228,8 +228,14 @@ async function handleCommand(chatId: string, agentName: string, userId: string, 
       await sendMessage(chatId, metrics)
       break
     }
+    case '/call': {
+      const port = (await import('../config/env.js')).env.PORT
+      const callUrl = `http://localhost:${port}/call.html?agent=${agentName}&user=${userId}&chat=${chatId}`
+      await sendMessage(chatId, `🎙️ *Voice Call*\n\nTap the link below to start a live voice conversation:\n\n${callUrl}\n\n_Opens in your browser. Allow microphone access when prompted._`)
+      break
+    }
     default:
-      await sendMessage(chatId, `Unknown command: ${cmd}\n\nAvailable: /memory, /forget, /log, /data`)
+      await sendMessage(chatId, `Unknown command: ${cmd}\n\nAvailable: /memory, /forget, /log, /data, /call`)
   }
 }
 

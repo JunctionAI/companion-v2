@@ -4,6 +4,11 @@ import { env } from './config/env.js'
 import { logger } from './lib/logger.js'
 import { verifyConnection as verifyNeo4j, closeDriver } from './lib/neo4j.js'
 import { chatRouter } from './api/routes/chat.js'
+import { voiceRouter } from './api/routes/voice.js'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 import { startTelegramTransport } from './transport/telegram.js'
 import { startScheduler, stopScheduler } from './workers/scheduler.js'
 
@@ -18,8 +23,12 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', version: '0.2.0' })
 })
 
+// ─── Static files (voice call page) ───
+app.use(express.static(path.join(__dirname, '..', 'public')))
+
 // ─── Routes ───
 app.use('/api/chat', chatRouter)
+app.use('/api/voice', voiceRouter)
 
 // ─── Start ───
 async function start() {
