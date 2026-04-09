@@ -99,6 +99,39 @@ export async function downloadFileAsBase64(fileId: string): Promise<{ base64: st
   }
 }
 
+/**
+ * Download a file from Telegram and return as a raw Buffer.
+ * Used for voice messages where we need the raw audio bytes.
+ */
+export async function downloadFileAsBuffer(fileId: string): Promise<Buffer | null> {
+  try {
+    const file = await getBot().getFile(fileId)
+    if (!file.file_path) return null
+
+    const url = `https://api.telegram.org/file/bot${env.TELEGRAM_BOT_TOKEN}/${file.file_path}`
+    const response = await fetch(url)
+    if (!response.ok) return null
+
+    return Buffer.from(await response.arrayBuffer())
+  } catch (err) {
+    logger.error({ err, fileId }, 'Failed to download Telegram file')
+    return null
+  }
+}
+
+/**
+ * Send a voice message (audio/ogg) to a Telegram chat.
+ */
+export async function sendVoiceMessage(chatId: string, audioBuffer: Buffer): Promise<boolean> {
+  try {
+    await getBot().sendVoice(chatId, audioBuffer, {}, { filename: 'response.mp3', contentType: 'audio/mpeg' })
+    return true
+  } catch (err) {
+    logger.error({ err, chatId }, 'Failed to send voice message')
+    return false
+  }
+}
+
 /** Split text on paragraph boundaries to fit Telegram's 4096 char limit */
 function splitMessage(text: string, maxLen: number): string[] {
   if (text.length <= maxLen) return [text]

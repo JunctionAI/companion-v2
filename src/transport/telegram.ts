@@ -9,7 +9,8 @@
  */
 
 import type TelegramBot from 'node-telegram-bot-api'
-import { startPollingBot, sendMessage, sendTyping, downloadFileAsBase64 } from '../lib/telegram.js'
+import { startPollingBot, sendMessage, sendTyping, downloadFileAsBase64, downloadFileAsBuffer, sendVoiceMessage } from '../lib/telegram.js'
+import OpenAI from 'openai'
 import { AGENTS, CHAT_TO_AGENT, AUTHORIZED_USERS } from '../config/telegram.js'
 import { env } from '../config/env.js'
 import { logger } from '../lib/logger.js'
@@ -76,13 +77,13 @@ async function handleMessage(msg: TelegramBot.Message) {
     logger.info({ senderId, chatId, agent: agentName }, 'Message from non-owner user in group chat')
   }
 
-  // Handle voice messages (TODO: Whisper transcription when OPENAI_API_KEY is set)
+  // Handle voice messages — transcribe via Whisper, respond via TTS
   if (msg.voice && !text) {
     if (!env.OPENAI_API_KEY) {
       await sendMessage(chatId, 'Voice messages require OpenAI API key for transcription. Please send text.')
       return
     }
-    await sendMessage(chatId, 'Voice transcription coming soon. Please send text for now.')
+    await handleVoiceMessage(chatId, agentName, agentConfig, msg)
     return
   }
 
@@ -349,5 +350,153 @@ export async function runScheduledTask(agentName: string, taskName: string) {
     } catch {
       // Can't even notify — just log
     }
+  }
+}
+
+/**
+ * Handle voice messages — transcribe with Whisper, process through agent brain,
+ * respond with TTS voice note + text fallback.
+ */
+async function handleVoiceMessage(
+  chatId: string, agentName: string, agentConfig: typeof AGENTS[string], msg: TelegramBot.Message,
+) {
+  const userId = agentConfig.userId
+
+  try {
+    await sendTyping(chatId)
+
+    // 1. Download voice file from Telegram
+    const audioBuffer = await downloadFileAsBuffer(msg.voice!.file_id)
+    if (!audioBuffer) {
+      await sendMessage(chatId, "Couldn't download voice message. Try again.")
+      return
+    }
+
+    // 2. Transcribe with Whisper
+    const transcript = await transcribeAudio(audioBuffer)
+    if (!transcript) {
+      await sendMessage(chatId, "Couldn't understand that voice message. Try again or send text.")
+      return
+    }
+
+    logger.info({ agent: agentName, userId, transcriptLen: transcript.length }, 'Voice transcribed')
+
+    // 3. Escalation check
+    const escalation = checkEscalation(transcript)
+    if (escalation.tier === 1) {
+      logger.warn({ userId, agent: agentName, pattern: escalation.triggerPattern }, 'ESCALATION TIER 1 (voice)')
+      await sendMessage(chatId, escalation.messageOverride!)
+      return
+    }
+
+    // 4. Save user message (note it came from voice)
+    saveMessage(userId, agentName, chatId, 'user', transcript)
+
+    // 5. Load brain + history
+    const brain = await loadAgentBrain(agentName, userId, transcript)
+    const recentMessages = getRecentMessages(userId, agentName, chatId, 6, 48)
+    const historyForLLM: ChatMessage[] = recentMessages.map(m => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }))
+
+    // 6. Call Claude
+    let fullResponse = ''
+    try {
+      for await (const chunk of streamChat(brain, historyForLLM, transcript, agentConfig.model)) {
+        fullResponse += chunk
+      }
+    } catch (err) {
+      logger.error({ err, agent: agentName }, 'Claude API call failed (voice)')
+      await sendMessage(chatId, 'Sorry, I hit an error. Try again in a moment.')
+      return
+    }
+
+    // 7. Learning loop
+    const cleanedResponse = processResponseLearning(agentName, transcript, fullResponse)
+
+    // 8. Escalation suffix
+    let finalResponse = cleanedResponse
+    if (escalation.mandatorySuffix) {
+      finalResponse += '\n\n' + escalation.mandatorySuffix
+    }
+
+    // 9. Generate voice response via TTS
+    const voiceBuffer = await generateSpeech(finalResponse)
+
+    // 10. Send voice response (with text fallback)
+    if (voiceBuffer) {
+      await sendVoiceMessage(chatId, voiceBuffer)
+    }
+    // Always send text too — voice notes can be hard to hear
+    const formatted = formatForTelegram(finalResponse)
+    await sendMessage(chatId, formatted)
+
+    // 11. Save assistant message
+    saveMessage(userId, agentName, chatId, 'assistant', fullResponse)
+
+    // 12. Background fact extraction
+    extractAndStoreFacts(userId, agentName, chatId, agentConfig.displayName)
+      .catch(err => logger.error({ err }, 'Background fact extraction failed (voice)'))
+
+    logger.info({
+      agent: agentName, userId,
+      inputLen: transcript.length, outputLen: fullResponse.length,
+      mode: 'voice',
+    }, 'Voice message handled')
+  } catch (err) {
+    logger.error({ err, agent: agentName }, 'Voice message handling failed')
+    await sendMessage(chatId, 'Error processing voice message. Try sending text instead.')
+  }
+}
+
+/**
+ * Transcribe audio buffer using OpenAI Whisper API.
+ * Accepts .ogg (Telegram voice format) directly.
+ */
+async function transcribeAudio(audioBuffer: Buffer): Promise<string | null> {
+  try {
+    const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
+    const file = new File([audioBuffer], 'voice.ogg', { type: 'audio/ogg' })
+
+    const transcription = await openai.audio.transcriptions.create({
+      model: 'whisper-1',
+      file,
+      language: 'en',
+    })
+
+    return transcription.text?.trim() || null
+  } catch (err) {
+    logger.error({ err }, 'Whisper transcription failed')
+    return null
+  }
+}
+
+/**
+ * Generate speech from text using OpenAI TTS API.
+ * Returns an MP3 buffer ready to send as a Telegram voice note.
+ */
+async function generateSpeech(text: string): Promise<Buffer | null> {
+  try {
+    const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY })
+
+    // Truncate to TTS limit (4096 chars) — use a natural break point
+    let ttsText = text
+    if (ttsText.length > 4000) {
+      const cutoff = ttsText.lastIndexOf('.', 4000)
+      ttsText = cutoff > 2000 ? ttsText.slice(0, cutoff + 1) : ttsText.slice(0, 4000)
+    }
+
+    const response = await openai.audio.speech.create({
+      model: 'tts-1',
+      voice: 'echo',
+      input: ttsText,
+      response_format: 'mp3',
+    })
+
+    return Buffer.from(await response.arrayBuffer())
+  } catch (err) {
+    logger.error({ err }, 'TTS generation failed')
+    return null
   }
 }
